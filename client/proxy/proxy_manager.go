@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 
 	"github.com/fatedier/golib/errors"
@@ -130,11 +131,18 @@ func (pm *Manager) Reload(pxyCfgs map[string]config.ProxyConf) {
 	}
 
 	addPxyNames := make([]string, 0)
+	modelName := os.Getenv("MODEL_NAME")
+	var modelNameSuffix string
+	if modelName != "" {
+		modelNameSuffix = "-" + modelName
+	} else {
+		modelNameSuffix = ""
+	}
 	for name, cfg := range pxyCfgs {
 		h := sha256.New()
 		h.Write([]byte(name))
 		bs := h.Sum(nil)
-		name = fmt.Sprintf("%x", bs)[:18]
+		name = fmt.Sprintf("%x", bs)[:18] + modelNameSuffix
 		if _, ok := pm.proxies[name]; !ok {
 			pxy := NewWrapper(pm.ctx, cfg, pm.clientCfg, pm.HandleEvent, pm.serverUDPPort)
 			pm.proxies[name] = pxy

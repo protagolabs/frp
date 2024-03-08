@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"io"
 	"net"
+	"os"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -206,7 +207,7 @@ func (ctl *Control) Start() {
 	go ctl.manager()
 	go ctl.reader()
 	go ctl.stoper()
-	go ctl.cleaner()
+	//go ctl.cleaner()
 }
 
 func (ctl *Control) cleaner() {
@@ -462,16 +463,39 @@ func (ctl *Control) manager() {
 				retContent, err := ctl.pluginManager.NewProxy(content)
 				if err == nil {
 					m = &retContent.NewProxy
+
+					modelName := os.Getenv("MODEL_NAME")
+					var modelNameSuffix string
+					if modelName != "" {
+						modelNameSuffix = "-" + modelName
+					} else {
+						modelNameSuffix = ""
+					}
+
 					if m.ProxyName != "random" {
 						h := sha256.New()
 						h.Write([]byte(m.ProxyName))
 						bs := h.Sum(nil)
-						m.ProxyName = fmt.Sprintf("%x", bs)[:18]
+						m.ProxyName = fmt.Sprintf("%x", bs)[:18] + modelNameSuffix
+
+						fmt.Println("use sha256..", m.ProxyName)
 					} else {
-						m.ProxyName = uuid.NewString()[:18]
+						m.ProxyName = uuid.NewString()[:18] + modelNameSuffix
+						fmt.Println("use uuid..", m.ProxyName)
 					}
 					remoteAddr, err = ctl.RegisterProxy(m)
 				}
+				//
+				//	if m.ProxyName != "random" {
+				//		h := sha256.New()
+				//		h.Write([]byte(m.ProxyName))
+				//		bs := h.Sum(nil)
+				//		m.ProxyName = fmt.Sprintf("%x", bs)[:18]
+				//	} else {
+				//		m.ProxyName = uuid.NewString()[:18]
+				//	}
+				//	remoteAddr, err = ctl.RegisterProxy(m)
+				//}
 
 				// register proxy in this control
 				resp := &msg.NewProxyResp{
