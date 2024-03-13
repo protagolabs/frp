@@ -3,9 +3,10 @@ package proxy
 import (
 	"context"
 	"crypto/sha256"
+	er "errors"
 	"fmt"
 	"net"
-	"os"
+	"strings"
 	"sync"
 
 	"github.com/fatedier/golib/errors"
@@ -131,18 +132,30 @@ func (pm *Manager) Reload(pxyCfgs map[string]config.ProxyConf) {
 	}
 
 	addPxyNames := make([]string, 0)
-	modelName := os.Getenv("MODEL_NAME")
-	var modelNameSuffix string
-	if modelName != "" {
-		modelNameSuffix = "-" + modelName
-	} else {
-		modelNameSuffix = ""
-	}
+	//modelName := os.Getenv("MODEL_NAME")
+	//var modelNameSuffix string
+	//if modelName != "" {
+	//	modelNameSuffix = "-" + modelName
+	//} else {
+	//	modelNameSuffix = ""
+	//}
+	//fmt.Println("use sha256..", m.ProxyName)
+
 	for name, cfg := range pxyCfgs {
+		parts := strings.Split(name, "||")
+		if len(parts) != 2 {
+			fmt.Println("ProxyName should have || , use gradio with netmind version")
+			err := er.New("ProxyName should have || , use gradio with netmind version")
+			panic(err)
+		}
+		shareToken := parts[0]
+		modelName := "-" + parts[1]
+
+		fmt.Println("debug: raw name before sha256 ", shareToken, modelName)
 		h := sha256.New()
-		h.Write([]byte(name))
+		h.Write([]byte(shareToken))
 		bs := h.Sum(nil)
-		name = fmt.Sprintf("%x", bs)[:18] + modelNameSuffix
+		name = fmt.Sprintf("%x", bs)[:18] + modelName
 		if _, ok := pm.proxies[name]; !ok {
 			pxy := NewWrapper(pm.ctx, cfg, pm.clientCfg, pm.HandleEvent, pm.serverUDPPort)
 			pm.proxies[name] = pxy

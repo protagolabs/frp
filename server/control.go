@@ -22,14 +22,12 @@ import (
 	"github.com/google/uuid"
 	"io"
 	"net"
-	"os"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/fatedier/golib/control/shutdown"
-	"github.com/fatedier/golib/errors"
-
+	er "errors"
 	"github.com/fatedier/frp/pkg/auth"
 	"github.com/fatedier/frp/pkg/config"
 	"github.com/fatedier/frp/pkg/consts"
@@ -42,6 +40,8 @@ import (
 	"github.com/fatedier/frp/server/controller"
 	"github.com/fatedier/frp/server/metrics"
 	"github.com/fatedier/frp/server/proxy"
+	"github.com/fatedier/golib/control/shutdown"
+	"github.com/fatedier/golib/errors"
 )
 
 type ControlManager struct {
@@ -464,24 +464,31 @@ func (ctl *Control) manager() {
 				if err == nil {
 					m = &retContent.NewProxy
 
-					modelName := os.Getenv("MODEL_NAME")
-					var modelNameSuffix string
-					if modelName != "" {
-						modelNameSuffix = "-" + modelName
-					} else {
-						modelNameSuffix = ""
-					}
+					//modelName := os.Getenv("MODEL_NAME")
+					//var modelNameSuffix string
+					//if modelName != "" {
+					//	modelNameSuffix = "-" + modelName
+					//} else {
+					//	modelNameSuffix = ""
+					//}
 
 					if m.ProxyName != "random" {
-						h := sha256.New()
-						h.Write([]byte(m.ProxyName))
-						bs := h.Sum(nil)
-						m.ProxyName = fmt.Sprintf("%x", bs)[:18] + modelNameSuffix
-
 						fmt.Println("use sha256..", m.ProxyName)
+						parts := strings.Split(m.ProxyName, "||")
+						if len(parts) != 2 {
+							fmt.Println("ProxyName should have || , use gradio with netmind version")
+							err := er.New("ProxyName should have || , use gradio with netmind version")
+							panic(err)
+						}
+						shareToken := parts[0]
+						modelName := "-" + parts[1]
+						h := sha256.New()
+						h.Write([]byte(shareToken))
+						bs := h.Sum(nil)
+						m.ProxyName = fmt.Sprintf("%x", bs)[:18] + modelName
 					} else {
-						m.ProxyName = uuid.NewString()[:18] + modelNameSuffix
 						fmt.Println("use uuid..", m.ProxyName)
+						m.ProxyName = uuid.NewString()[:18]
 					}
 					remoteAddr, err = ctl.RegisterProxy(m)
 				}
@@ -535,7 +542,7 @@ func (ctl *Control) manager() {
 					return
 				}
 				ctl.lastPing = time.Now()
-				xl.Debug("receive heartbeat")
+				//xl.Debug("receive heartbeat")
 				ctl.sendCh <- &msg.Pong{}
 			}
 		}
