@@ -15,13 +15,16 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"github.com/fatedier/golib/crypto"
 	"github.com/google/uuid"
 	"io"
 	"net"
+	"net/http"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -143,9 +146,10 @@ type Control struct {
 	// Server configuration information
 	serverCfg config.ServerCommonConf
 
-	xl     *xlog.Logger
-	ctx    context.Context
-	closed bool
+	xl        *xlog.Logger
+	ctx       context.Context
+	closed    bool
+	ServerUrl string
 }
 
 func NewControl(
@@ -186,6 +190,7 @@ func NewControl(
 		xl:              xlog.FromContextSafe(ctx),
 		ctx:             ctx,
 		closed:          false,
+		ServerUrl:       "http://service-auto-deploy.gradio-inference-deploy.svc.cluster.local:8600/endpoint/create",
 	}
 }
 
@@ -517,6 +522,9 @@ func (ctl *Control) manager() {
 					metrics.Server.NewProxy(m.ProxyName, m.ProxyType)
 				}
 				ctl.sendCh <- resp
+				if m.ProxyType == "http" {
+					go ctl.SendMessageAfterSuccess(m.ProxyName)
+				}
 			case *msg.CloseProxy:
 				_ = ctl.CloseProxy(m)
 				xl.Info("close proxy [%s] success", m.ProxyName)
@@ -546,6 +554,35 @@ func (ctl *Control) manager() {
 				ctl.sendCh <- &msg.Pong{}
 			}
 		}
+	}
+}
+
+func (ctl *Control) SendMessageAfterSuccess(prefix string) {
+
+	connectUrl := fmt.Sprintf("%s.%s", prefix, ctl.serverCfg.SubDomainHost)
+	fmt.Println("debug:  send connectUrl:", connectUrl)
+	data, err := json.Marshal(map[string]string{"endpoint_url": connectUrl})
+	if err != nil {
+		ctl.xl.Error("json marshal error")
+		fmt.Println("error in json marshal")
+		panic(err)
+	}
+	fmt.Println("Sending JSON data:", string(data))
+	response, err := http.Post(ctl.ServerUrl, "application/json", bytes.NewBuffer(data))
+	defer func() {
+		if response != nil {
+			response.Body.Close()
+		}
+	}()
+	if err != nil {
+		ctl.xl.Error("HTTP post error")
+		fmt.Println("error in HTTP post:", err)
+		return
+	}
+
+	var result map[string]string
+	if body, err := io.ReadAll(response.Body); err == nil {
+		err = json.Unmarshal(body, &result)
 	}
 }
 
