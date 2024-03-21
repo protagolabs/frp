@@ -146,10 +146,11 @@ type Control struct {
 	// Server configuration information
 	serverCfg config.ServerCommonConf
 
-	xl        *xlog.Logger
-	ctx       context.Context
-	closed    bool
-	ServerUrl string
+	xl              *xlog.Logger
+	ctx             context.Context
+	closed          bool
+	ServerCreateUrl string
+	ServerDeleteUrl string
 }
 
 func NewControl(
@@ -190,7 +191,8 @@ func NewControl(
 		xl:              xlog.FromContextSafe(ctx),
 		ctx:             ctx,
 		closed:          false,
-		ServerUrl:       "http://service-auto-deploy.gradio-inference-deploy.svc.cluster.local:8600/endpoint/create",
+		ServerCreateUrl: "http://service-auto-deploy.gradio-inference-deploy.svc.cluster.local:8600/endpoint/create",
+		ServerDeleteUrl: "http://service-auto-deploy.gradio-inference-deploy.svc.cluster.local:8600/endpoint/delete_by_url",
 	}
 }
 
@@ -408,8 +410,8 @@ func (ctl *Control) stoper() {
 		go func() {
 			_ = ctl.pluginManager.CloseProxy(notifyContent)
 		}()
+		go ctl.SendDeleteEndpoint(pxy.GetName())
 	}
-
 	ctl.allShutdown.Done()
 	xl.Info("client exit success")
 	metrics.Server.CloseClient()
@@ -523,7 +525,7 @@ func (ctl *Control) manager() {
 				}
 				ctl.sendCh <- resp
 				if m.ProxyType == "http" {
-					go ctl.SendMessageAfterSuccess(m.ProxyName)
+					go ctl.SendCreateEndpoint(m.ProxyName)
 				}
 			case *msg.CloseProxy:
 				_ = ctl.CloseProxy(m)
@@ -556,8 +558,35 @@ func (ctl *Control) manager() {
 		}
 	}
 }
+func (ctl *Control) SendDeleteEndpoint(prefix string) {
+	connectUrl := fmt.Sprintf("%s.%s", prefix, ctl.serverCfg.SubDomainHost)
+	fmt.Println("debug:  send connectUrl:", connectUrl)
+	data, err := json.Marshal(map[string]string{"endpoint_url": connectUrl})
+	if err != nil {
+		ctl.xl.Error("json marshal error")
+		fmt.Println("error in json marshal")
+		panic(err)
+	}
+	fmt.Println("Sending JSON data:", string(data))
 
-func (ctl *Control) SendMessageAfterSuccess(prefix string) {
+	response, err := http.Post(ctl.ServerDeleteUrl, "application/json", bytes.NewBuffer(data))
+	defer func() {
+		if response != nil {
+			response.Body.Close()
+		}
+	}()
+	if err != nil {
+		ctl.xl.Error("HTTP post error")
+		fmt.Println("error in HTTP post:", err)
+		return
+	}
+	var result map[string]string
+	if body, err := io.ReadAll(response.Body); err == nil {
+		err = json.Unmarshal(body, &result)
+	}
+	fmt.Println("delete endpoint result:", result)
+}
+func (ctl *Control) SendCreateEndpoint(prefix string) {
 
 	connectUrl := fmt.Sprintf("%s.%s", prefix, ctl.serverCfg.SubDomainHost)
 	fmt.Println("debug:  send connectUrl:", connectUrl)
@@ -568,7 +597,7 @@ func (ctl *Control) SendMessageAfterSuccess(prefix string) {
 		panic(err)
 	}
 	fmt.Println("Sending JSON data:", string(data))
-	response, err := http.Post(ctl.ServerUrl, "application/json", bytes.NewBuffer(data))
+	response, err := http.Post(ctl.ServerCreateUrl, "application/json", bytes.NewBuffer(data))
 	defer func() {
 		if response != nil {
 			response.Body.Close()
@@ -584,6 +613,7 @@ func (ctl *Control) SendMessageAfterSuccess(prefix string) {
 	if body, err := io.ReadAll(response.Body); err == nil {
 		err = json.Unmarshal(body, &result)
 	}
+	fmt.Println("create endpoint result:", result)
 }
 
 func (ctl *Control) RegisterProxy(pxyMsg *msg.NewProxy) (remoteAddr string, err error) {
