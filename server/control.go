@@ -173,11 +173,11 @@ func NewControl(
 	var ServerDeleteUrl string
 	// use address in eks , due to its been deployed in same cluster
 	if stage == "prod" {
-		ServerCreateUrl = "http://service-auto-deploy.gradio-inference-deploy.svc.cluster.local:8600/endpoint/create"
-		ServerDeleteUrl = "http://service-auto-deploy.gradio-inference-deploy.svc.cluster.local:8600/endpoint/delete_by_url"
+		ServerCreateUrl = "http://service-auto-deploy-service.prod.svc.cluster.local/endpoint/create"
+		ServerDeleteUrl = "http://service-auto-deploy-service.prod.svc.cluster.local/endpoint/delete_by_url"
 	} else {
-		ServerCreateUrl = "http://service-auto-deploy-test.gradio-inference-deploy.svc.cluster.local:8600/endpoint/create"
-		ServerDeleteUrl = "http://service-auto-deploy-test.gradio-inference-deploy.svc.cluster.local:8600/endpoint/delete_by_url"
+		ServerCreateUrl = "http://service-auto-deploy-test-service.test.svc.cluster.local/endpoint/create"
+		ServerDeleteUrl = "http://service-auto-deploy-test-service.test.svc.cluster.local/endpoint/delete_by_url"
 	}
 	return &Control{
 		rc:              rc,
